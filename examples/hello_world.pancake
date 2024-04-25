@@ -1,0 +1,6 @@
+push 1
+
+'through 
+  push 5
+
+call through

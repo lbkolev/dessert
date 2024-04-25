@@ -1,0 +1,12 @@
+[package]
+name = "pancake"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "pancake"
+path = "./src/bin/pancake.rs"
+
+[[bin]]
+name = "syrup"
+path = "./src/bin/syrup.rs"
