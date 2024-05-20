@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::read_to_string, num::NonZeroU64};
+use std::collections::HashMap;
 
 type Stack = Vec<u8>;
 type Memory = Vec<u8>;
@@ -12,40 +12,61 @@ struct Context {
 
 #[derive(Clone, Debug)]
 pub enum Instruction {
+    // Pushes a value onto the stack.
     Push(u8),
+    // Removes the top value from the stack.
     Pop,
+    // Prints the top value of the stack.
     Print,
 
-    // LOAD
-    // STORE
+    // Arithmetic operations on the top values of the stack.
+    Add,
+    Sub,
+    Mul,
+    Div,
 
-    // Function definition
-    Func(String),
+    // Loads a value from memory onto the stack
+    Load,
+    // Stores the value from the stack into memory
+    Store,
 
-    // Function call
-    Call(String),
+    // Jumps to the instruction /used by loops/
+    Jump(usize),
+
+    // /Optionally/ Designates the end of the program execution
+    Halt,
 }
 
 fn map_op(s: (&str, Option<&str>)) -> Instruction {
     use Instruction::*;
 
     match s.0 {
-        s if s.starts_with('\'') => Func(s.replace('\'', "")),
-
         "push" => Push(
-            s.1.map(|v| v.parse::<u8>().unwrap())
-                .expect("Invalid push value"),
+            s.1.expect("missing push arg")
+                .parse::<u8>()
+                .expect("invalud push u8"),
         ),
         "pop" => Pop,
         "print" => Print,
-        "call" => Call(s.1.expect("Invalid function").to_string()),
+        "add" => Add,
+        "sub" => Sub,
+        "mul" => Mul,
+        "div" => Div,
+        "load" => Load,
+        "store" => Store,
+        "jump" => Jump(
+            s.1.expect("missing jump arg")
+                .parse::<usize>()
+                .expect("invalid jump usize"),
+        ),
+        "halt" => Halt,
         _ => {
-            panic!("Invalid opcode {:?}", s.0)
+            panic!("Invalid instruction {:?}", s.0)
         }
     }
 }
 
-fn run(instructions: Vec<Instruction>) {
+fn run(instructions: Vec<Instruction>) -> Result<(), Box<dyn std::error::Error>> {
     use Instruction::*;
 
     let mut context = Context {
@@ -59,45 +80,74 @@ fn run(instructions: Vec<Instruction>) {
         let ins = &instructions[context.pc as usize];
 
         match ins {
-            // Push to the top of the stack
             Push(v) => {
                 context.stack.push(*v);
                 context.pc += 1;
             }
-            // Pop the last element of the stack
             Pop => {
                 context.stack.pop();
                 context.pc += 1;
             }
-            // Output the last element of the stack
             Print => {
                 println!("{}", context.stack.last().expect("Empty Stack"));
                 context.pc += 1;
             }
-            Func(name) => {
-                labels.insert(name, context.pc);
+            Add => {
+                let r = context.stack.pop().expect("Empty Stack")
+                    + context.stack.pop().expect("Empty Stack");
+                context.stack.push(r);
                 context.pc += 1;
             }
-            Call(func) => {
-                let pc = labels
-                    .get(func.as_str())
-                    .unwrap_or_else(|| panic!("No function {}", func));
-
-                context.pc = *pc + 1;
+            Sub => {
+                let r = context.stack.pop().expect("Empty Stack")
+                    - context.stack.pop().expect("Empty Stack");
+                context.stack.push(r);
+                context.pc += 1;
+            }
+            Mul => {
+                let r = context.stack.pop().expect("Empty Stack")
+                    * context.stack.pop().expect("Empty Stack");
+                context.stack.push(r);
+                context.pc += 1;
+            }
+            Div => {
+                let r = context.stack.pop().expect("Empty Stack")
+                    / context.stack.pop().expect("Empty Stack");
+                context.stack.push(r);
+                context.pc += 1;
+            }
+            Load => {
+                let r = context.memory.pop().expect("Empty memory");
+                context.stack.push(r);
+                context.pc += 1;
+            }
+            Store => {
+                let r = context.stack.pop().expect("Empty stack");
+                context.memory.push(r);
+                context.pc += 1;
+            }
+            Halt => {
+                std::process::exit(0);
+            }
+            Jump(_) => {
+                eprintln!("Jump Instruction set not implemented");
+                std::process::exit(1);
             }
         }
     }
+
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // read out the file
-    // go through each line
-    // verify that each line has at most two strings separated by space
-    // \n is operation separator
-    // check if the first string is a valid operation
-    // check the validity of the operation value
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 2 {
+        eprintln!("Usage: {} <instruction_file>", args[0]);
+        eprintln!("Runs the specified instruction file in the stack-based VM (pancake).");
+        std::process::exit(1)
+    }
 
-    let content = read_to_string("./examples/hello_world.pancake")?
+    let content = std::fs::read_to_string(args[1].clone())?
         .split('\n')
         .filter(|line| !line.is_empty())
         .map(|line| {
@@ -107,8 +157,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect::<Vec<Instruction>>();
 
-    //println!("{:#?}", content);
-
-    run(content);
-    Ok(())
+    run(content)
 }
