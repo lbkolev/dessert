@@ -7,34 +7,45 @@ type Memory = Vec<u8>;
 struct Context {
     pub stack: Stack,
     pub memory: Memory,
-    pub pc: u64,
+    pub pc: usize,
+    pub call_stack: Vec<usize>,
 }
 
 #[derive(Clone, Debug)]
 pub enum Instruction {
-    // Pushes a value onto the stack.
+    // Stack operations
     Push(u8),
-    // Removes the top value from the stack.
     Pop,
-    // Prints the top value of the stack.
     Print,
 
-    // Arithmetic operations on the top values of the stack.
+    // Arithmetic operations
     Add,
     Sub,
     Mul,
     Div,
 
-    // Loads a value from memory onto the stack
+    // Memory operations
     Load,
-    // Stores the value from the stack into memory
     Store,
 
-    // Jumps to the instruction /used by loops/
-    Jump(usize),
+    // Control flow
+    Jump(String),
+    JumpZ(String), // Jump if zero
+    JumpNotZ(String),
+    Call(String),
+    Ret,
 
-    // /Optionally/ Designates the end of the program execution
+    // Resolved control flow (after label resolution)
+    JumpResolved(usize),
+    JumpZResolved(usize),
+    JumpNotZResolved(usize),
+    CallResolved(usize),
+
+    // Program control
     Halt,
+
+    // For label definitions
+    Label(String),
 }
 
 fn map_op(s: (&str, Option<&str>)) -> Instruction {
@@ -44,7 +55,7 @@ fn map_op(s: (&str, Option<&str>)) -> Instruction {
         "push" => Push(
             s.1.expect("missing push arg")
                 .parse::<u8>()
-                .expect("invalud push u8"),
+                .expect("invalid push u8"),
         ),
         "pop" => Pop,
         "print" => Print,
@@ -54,14 +65,18 @@ fn map_op(s: (&str, Option<&str>)) -> Instruction {
         "div" => Div,
         "load" => Load,
         "store" => Store,
-        "jump" => Jump(
-            s.1.expect("missing jump arg")
-                .parse::<usize>()
-                .expect("invalid jump usize"),
-        ),
+        "jump" => Jump(s.1.expect("missing jump arg").to_string()),
+        "jumpz" => JumpZ(s.1.expect("missing jumpz arg").to_string()),
+        "jumpnotz" => JumpNotZ(s.1.expect("missing jumpnotz arg").to_string()),
+        "call" => Call(s.1.expect("missing call arg").to_string()),
+        "ret" => Ret,
         "halt" => Halt,
         _ => {
-            panic!("Invalid instruction {:?}", s.0)
+            if s.0.ends_with(':') {
+                Label(s.0[..s.0.len() - 1].to_string())
+            } else {
+                panic!("Invalid instruction {:?}", s.0)
+            }
         }
     }
 }
@@ -73,11 +88,11 @@ fn run(instructions: Vec<Instruction>) -> Result<(), Box<dyn std::error::Error>>
         stack: vec![],
         memory: vec![],
         pc: 0,
+        call_stack: vec![],
     };
-    let mut labels: HashMap<&str, u64> = HashMap::new();
 
-    while context.pc < instructions.len() as u64 {
-        let ins = &instructions[context.pc as usize];
+    while context.pc < instructions.len() {
+        let ins = &instructions[context.pc];
 
         match ins {
             Push(v) => {
@@ -93,45 +108,88 @@ fn run(instructions: Vec<Instruction>) -> Result<(), Box<dyn std::error::Error>>
                 context.pc += 1;
             }
             Add => {
-                let r = context.stack.pop().expect("Empty Stack")
-                    + context.stack.pop().expect("Empty Stack");
-                context.stack.push(r);
+                let b = context.stack.pop().expect("Empty Stack");
+                let a = context.stack.pop().expect("Empty Stack");
+                context.stack.push(a.wrapping_add(b));
                 context.pc += 1;
             }
             Sub => {
-                let r = context.stack.pop().expect("Empty Stack")
-                    - context.stack.pop().expect("Empty Stack");
-                context.stack.push(r);
+                let b = context.stack.pop().expect("Empty Stack");
+                let a = context.stack.pop().expect("Empty Stack");
+                context.stack.push(a.wrapping_sub(b));
                 context.pc += 1;
             }
             Mul => {
-                let r = context.stack.pop().expect("Empty Stack")
-                    * context.stack.pop().expect("Empty Stack");
-                context.stack.push(r);
+                let b = context.stack.pop().expect("Empty Stack");
+                let a = context.stack.pop().expect("Empty Stack");
+                context.stack.push(a.wrapping_mul(b));
                 context.pc += 1;
             }
             Div => {
-                let r = context.stack.pop().expect("Empty Stack")
-                    / context.stack.pop().expect("Empty Stack");
-                context.stack.push(r);
+                let b = context.stack.pop().expect("Empty Stack");
+                let a = context.stack.pop().expect("Empty Stack");
+                if b == 0 {
+                    eprintln!("Division by zero");
+                    std::process::exit(1);
+                }
+                context.stack.push(a / b);
                 context.pc += 1;
             }
             Load => {
-                let r = context.memory.pop().expect("Empty memory");
-                context.stack.push(r);
+                let addr = context.stack.pop().expect("Empty Stack") as usize;
+                let value = if addr < context.memory.len() {
+                    context.memory[addr]
+                } else {
+                    0
+                };
+                context.stack.push(value);
                 context.pc += 1;
             }
             Store => {
-                let r = context.stack.pop().expect("Empty stack");
-                context.memory.push(r);
+                let addr = context.stack.pop().expect("Empty Stack") as usize;
+                let value = context.stack.pop().expect("Empty Stack");
+                if addr >= context.memory.len() {
+                    context.memory.resize(addr + 1, 0);
+                }
+                context.memory[addr] = value;
                 context.pc += 1;
             }
-            Halt => {
-                std::process::exit(0);
+            JumpResolved(addr) => {
+                context.pc = *addr;
             }
-            Jump(_) => {
-                eprintln!("Jump Instruction set not implemented");
-                std::process::exit(1);
+            JumpZResolved(addr) => {
+                let cond = context.stack.pop().expect("Empty Stack");
+                if cond == 0 {
+                    context.pc = *addr;
+                } else {
+                    context.pc += 1;
+                }
+            }
+            JumpNotZResolved(addr) => {
+                let cond = context.stack.pop().expect("Empty Stack");
+                if cond != 0 {
+                    context.pc = *addr;
+                } else {
+                    context.pc += 1;
+                }
+            }
+            CallResolved(addr) => {
+                context.call_stack.push(context.pc + 1);
+                context.pc = *addr;
+            }
+            Ret => {
+                context.pc = context.call_stack.pop().expect("Call stack underflow");
+            }
+            Halt => {
+                break;
+            }
+            Label(_) => {
+                // Labels are no-ops during execution
+                context.pc += 1;
+            }
+            Jump(_) | JumpZ(_) | JumpNotZ(_) | Call(_) => {
+                // These should have been resolved before execution
+                panic!("Unresolved label at pc {}: {:?}", context.pc, ins);
             }
         }
     }
@@ -140,6 +198,8 @@ fn run(instructions: Vec<Instruction>) -> Result<(), Box<dyn std::error::Error>>
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use Instruction::*;
+
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
         eprintln!("Usage: {} <instruction_file>", args[0]);
@@ -147,15 +207,74 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1)
     }
 
-    let content = std::fs::read_to_string(args[1].clone())?
-        .split('\n')
-        .filter(|line| !line.is_empty())
-        .map(|line| {
-            let mut line = line.split_whitespace();
+    // Read all lines
+    let binding = std::fs::read_to_string(args[1].clone())?;
+    let lines = binding
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty() && !line.starts_with("//"))
+        .collect::<Vec<&str>>();
 
-            map_op((line.next().unwrap(), line.next()))
-        })
-        .collect::<Vec<Instruction>>();
+    let mut raw_instructions = Vec::new();
 
-    run(content)
+    // First pass: parse instructions and collect labels
+    let mut labels = HashMap::new(); // Map<String, usize>
+    let mut pc = 0;
+    for line in lines {
+        // Skip comments and empty lines
+        if line.is_empty() || line.starts_with("//") {
+            continue;
+        }
+
+        if let Some(label) = line.strip_suffix(':') {
+            if labels.contains_key(&label) {
+                panic!("Duplicate label: {}", label);
+            }
+            labels.insert(label.clone(), pc);
+            raw_instructions.push(Instruction::Label(label.into()));
+        } else {
+            let mut parts = line.split_whitespace();
+            let op = parts.next().unwrap();
+            let arg = parts.next();
+            let instr = map_op((op, arg));
+            raw_instructions.push(instr);
+            pc += 1;
+        }
+    }
+
+    // Second pass: resolve labels in instructions
+    let mut instructions = Vec::new();
+    for instr in raw_instructions {
+        match instr {
+            Jump(label) => {
+                let addr = *labels
+                    .get(&label.as_str())
+                    .unwrap_or_else(|| panic!("Undefined label: {}", label));
+                instructions.push(JumpResolved(addr));
+            }
+            JumpZ(label) => {
+                let addr = *labels
+                    .get(&label.as_str())
+                    .unwrap_or_else(|| panic!("Undefined label: {}", label));
+                instructions.push(JumpZResolved(addr));
+            }
+            JumpNotZ(label) => {
+                let addr = *labels
+                    .get(&label.as_str())
+                    .unwrap_or_else(|| panic!("Undefined label: {}", label));
+                instructions.push(JumpNotZResolved(addr));
+            }
+            Call(label) => {
+                let addr = *labels
+                    .get(&label.as_str())
+                    .unwrap_or_else(|| panic!("Undefined label: {}", label));
+                instructions.push(CallResolved(addr));
+            }
+            _ => {
+                instructions.push(instr);
+            }
+        }
+    }
+
+    run(instructions)
 }
