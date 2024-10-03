@@ -1,0 +1,48 @@
+// compute factorials
+
+// the factorial to compute (5! in this case)
+push 7
+push 0
+store
+
+push 1
+push 1
+store
+
+push 0
+load
+push 2
+store
+
+loop_start:
+    push 2
+    load
+
+    push 1
+    sub
+
+    jumpz end_loop
+
+    push 1
+    load
+    push 2
+    load
+    mul
+
+    push 1
+    store
+
+    push 2
+    load
+    push 1
+    sub
+    push 2
+    store
+
+    jump loop_start
+
+end_loop:
+    push 1
+    load
+    print
+    halt

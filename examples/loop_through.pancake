@@ -1,0 +1,25 @@
+// loop through 1-100
+
+push 1
+push 0
+store
+
+loop_start:
+    push 0
+    load
+    print
+    push 0
+    load
+    push 1
+    add
+    push 0
+    store
+    push 0
+    load
+    push 101
+    sub
+    jumpz end_loop
+    jump loop_start
+
+end_loop:
+    halt

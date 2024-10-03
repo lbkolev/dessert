@@ -1,9 +1,0 @@
-push 55jj
-call double 
-print
-halt
-
-double:
-  push 2
-  mul
-  ret

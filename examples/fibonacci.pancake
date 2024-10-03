@@ -1,7 +1,58 @@
+// Compute fibonacci seq =20
+
+push 0
+push 0
+store
+
 push 1
+push 1
+store
 
-'through 
-  push 5
-end
+push 1
+push 2
+store
 
-call through
+// the number of iteration
+push 20
+push 4
+store
+
+
+loop_start:
+    push 1
+    load
+    print
+
+    push 0
+    load
+    push 1
+    load
+    add
+
+    push 1
+    load
+    push 0
+    store
+
+    push 1
+    store
+
+    push 2
+    load
+    push 1
+    add
+    push 2
+    store
+
+    push 2
+    load
+    push 4
+    load
+    sub
+
+    jumpz end_loop
+    jump loop_start
+
+end_loop:
+    halt
+
