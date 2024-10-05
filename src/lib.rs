@@ -54,6 +54,7 @@ impl From<std::num::ParseIntError> for VMError {
 #[derive(Clone, Debug)]
 pub enum Instruction {
     // stack operations
+    Swap,
     Push(u16),
     Pop,
     Print,
@@ -159,6 +160,14 @@ pub fn run_vm(instructions: Vec<Instruction>) -> Result<(), VMError> {
         let ins = &instructions[context.pc];
 
         match ins {
+            Swap => {
+                let a = context.stack.pop().ok_or(VMError::StackUnderflow)?;
+                let b = context.stack.pop().ok_or(VMError::StackUnderflow)?;
+
+                context.stack.push(a);
+                context.stack.push(b);
+                context.pc += 1;
+            }
             Push(v) => {
                 context.stack.push(*v);
                 context.pc += 1;
