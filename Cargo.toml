@@ -1,12 +1,15 @@
 [package]
-name = "pancake"
+name = "dessert"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "pancake"
-path = "./src/bin/pancake.rs"
+path = "src/bin/pancake.rs"
 
 [[bin]]
 name = "syrup"
-path = "./src/bin/syrup.rs"
+path = "src/bin/syrup.rs"

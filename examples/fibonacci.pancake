@@ -1,58 +1,61 @@
-// Compute fibonacci seq =20
+// compute fibonacci
 
 push 0
 push 0
-store
+store        // memory[0] = 0 (Fibonacci(0))
 
 push 1
 push 1
-store
+store        // memory[1] = 1 (Fibonacci(1))
 
 push 1
 push 2
-store
+store        // memory[2] = 1 (tmp storage for calculations)
 
-// the number of iteration
 push 20
 push 4
-store
-
+store        // memory[4] = 20 (loop counter)
 
 loop_start:
+    // print current fibonacci number
     push 1
     load
     print
 
+    // calculate next fibonacci number: memory[2] = memory[0] + memory[1]
     push 0
     load
     push 1
     load
     add
+    push 2
+    store
 
+    // update memory[0] = memory[1]
     push 1
     load
     push 0
     store
 
-    push 1
-    store
-
+    // update memory[1] = memory[2]
     push 2
     load
     push 1
-    add
-    push 2
     store
 
-    push 2
-    load
+    // decrement loop counter: memory[4] = memory[4] - 1
     push 4
     load
+    push 1
     sub
+    push 4
+    store
 
+    // Check if loop should continue
+    push 4
+    load
     jumpz end_loop
     jump loop_start
 
 end_loop:
     halt
-
